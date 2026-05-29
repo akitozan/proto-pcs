@@ -1,0 +1,501 @@
+{
+  "472754785762803724": {
+    "chars": {
+      "Valen D'Arcangelo": {
+        "name": "Valen D'Arcangelo",
+        "discord_id": "472754785762803724",
+        "class": "Medic",
+        "race": "Sankta",
+        "infected": "No",
+        "shield": "No",
+        "str": -2,
+        "dex": 0,
+        "int": 0,
+        "wis": 4,
+        "max_hp": 7,
+        "current_hp": 7,
+        "max_ap": 15,
+        "current_ap": 7,
+        "ac": 10,
+        "spd": 6,
+        "weapons": [
+          {
+            "slot": 1,
+            "name": "Agnes (Guardian Gun+2) (Upgrade+1)",
+            "damage": "1d4+WIS(4)",
+            "atk_bonus": 3,
+            "primary": true
+          },
+          {
+            "slot": 2,
+            "name": "Knife",
+            "damage": "1d5+DEX(0)",
+            "atk_bonus": 0,
+            "primary": false
+          }
+        ],
+        "accessories": [
+          {
+            "slot": 1,
+            "name": "Red Dot Sight",
+            "effect": "ไว้เล็ง บวกไรยังไม่รู้"
+          }
+        ],
+        "modifiers": [
+          {
+            "name": "การเจรจา",
+            "note": "Bonus +3"
+          },
+          {
+            "name": "การข่มขู่",
+            "note": "Bonus +3"
+          },
+          {
+            "name": "การทำความเข้าใจกลไก และเทคโนโลยี",
+            "note": "Bonus +3"
+          },
+          {
+            "name": "การโน้มน้าว(เจรจา)",
+            "note": "Advantage"
+          }
+        ],
+        "sheet_tab": "Valen",
+        "ranged": {
+          "1": {
+            "total": 35,
+            "unit": "นัด",
+            "mag_size": 15,
+            "current_in_mag": 15,
+            "per_shot": 1
+          }
+        }
+      }
+    },
+    "default": "Valen D'Arcangelo"
+  },
+  "289984780013928450": {
+    "chars": {
+      "Witmond Audric von  Wisburg": {
+        "name": "Witmond Audric von  Wisburg",
+        "discord_id": "289984780013928450",
+        "class": "Caster",
+        "race": "Sarkaz:Lich",
+        "infected": "No",
+        "shield": "No",
+        "str": -2,
+        "dex": 0,
+        "int": 4,
+        "wis": 0,
+        "max_hp": 6,
+        "current_hp": 6,
+        "max_ap": 25,
+        "current_ap": 25,
+        "ac": 10,
+        "spd": 6,
+        "weapons": [
+          {
+            "slot": 1,
+            "name": "Flüssigkeitstakt (Upgrade+1)",
+            "damage": "1d8+INT(4)",
+            "atk_bonus": 1,
+            "primary": true
+          }
+        ],
+        "accessories": [],
+        "modifiers": [
+          {
+            "name": "การเจรจา(Leithanien)",
+            "note": "Advantage"
+          },
+          {
+            "name": "เกี่ยวกับเรื่องการวิจัย",
+            "note": "Bonus +3"
+          },
+          {
+            "name": "โบนัสการค้นหาและสืบสวน",
+            "note": "Bonus +3"
+          }
+        ],
+        "sheet_tab": "wit"
+      }
+    },
+    "default": "Witmond Audric von  Wisburg"
+  },
+  "848019207765622856": {
+    "chars": {
+      "Faris": {
+        "name": "Faris",
+        "discord_id": "848019207765622856",
+        "class": "Guard",
+        "race": "Sarkaz:Goliath",
+        "infected": "Yes",
+        "shield": "No",
+        "str": 2,
+        "dex": 2,
+        "int": -1,
+        "wis": -1,
+        "max_hp": 8,
+        "current_hp": 8,
+        "max_ap": 15,
+        "current_ap": 15,
+        "ac": 12,
+        "spd": 6,
+        "weapons": [
+          {
+            "slot": 1,
+            "name": "Erebus Caligos (Upgrade+1)",
+            "damage": "1d8+STR(2)",
+            "atk_bonus": 1,
+            "primary": true
+          },
+          {
+            "slot": 2,
+            "name": "Erebus Caligos (Upgrade+1)",
+            "damage": "1d8+DEX(2)",
+            "atk_bonus": 1,
+            "primary": false
+          },
+          {
+            "slot": 3,
+            "name": "Throwing knives",
+            "damage": "1d4+DEX(2)",
+            "atk_bonus": 0,
+            "primary": false
+          }
+        ],
+        "accessories": [
+          {
+            "slot": 1,
+            "name": "เครื่องรางลายศรีวัตสา",
+            "effect": "เลือกใช้ adv ได้ 1 ครั้งใน skill check อะไรก็ได้ต่อ Longrest"
+          },
+          {
+            "slot": 2,
+            "name": "Tactical Vest",
+            "effect": "ใส่ของได้ 2 ช่อง"
+          }
+        ],
+        "modifiers": [
+          {
+            "name": "โบนัสการเอาตัวรอด",
+            "note": "Bonus +6"
+          },
+          {
+            "name": "Skill check การเอาตัวรอด",
+            "note": "Advantage"
+          },
+          {
+            "name": "Combat Temp",
+            "note": "Hp 1d6+1"
+          },
+          {
+            "name": "การเจรจาทุกรูปแบบ",
+            "note": "Disadvantage"
+          }
+        ],
+        "sheet_tab": "Faris",
+        "ranged": {
+          "3": {
+            "total": 6,
+            "unit": "เล่ม",
+            "mag_size": 0,
+            "current_in_mag": 6,
+            "per_shot": 1
+          }
+        }
+      }
+    },
+    "default": "Faris"
+  },
+  "574416421451464797": {
+    "chars": {
+      "Esaías": {
+        "name": "Esaías",
+        "discord_id": "574416421451464797",
+        "class": "Defender",
+        "race": "Aegir",
+        "infected": "Yes",
+        "shield": "Yes",
+        "str": 3,
+        "dex": -2,
+        "int": 0,
+        "wis": 1,
+        "max_hp": 10,
+        "current_hp": 10,
+        "max_ap": 15,
+        "current_ap": 10,
+        "ac": 18,
+        "spd": 6,
+        "weapons": [
+          {
+            "slot": 1,
+            "name": "Faronáutico",
+            "damage": "1d5+STR(3)",
+            "atk_bonus": 1,
+            "primary": true
+          },
+          {
+            "slot": 2,
+            "name": "มือเปล่า",
+            "damage": "STR(3)",
+            "atk_bonus": 0,
+            "primary": false
+          }
+        ],
+        "accessories": [],
+        "modifiers": [
+          {
+            "name": "การเอาตัวรอด",
+            "note": "Bonus +3"
+          },
+          {
+            "name": "การเอาตัวรอด (ใกล้แหล่งนํ้า)",
+            "note": "Bonus +6 / Move +2"
+          },
+          {
+            "name": "ชำนาญด้านงานจิปาถะ",
+            "note": "Bonus +3"
+          },
+          {
+            "name": "ชำนาญ Performance เกี่ยวกับดนตรี / ร้องเพลง / เต้นรำ",
+            "note": "Bonus +3"
+          },
+          {
+            "name": "ความรู้ด้านศาสนาและลัทธิ",
+            "note": "Bonus +3"
+          }
+        ],
+        "sheet_tab": "Esai"
+      }
+    },
+    "default": "Esaías"
+  },
+  "289985310321016833": {
+    "chars": {
+      "Rosso Cielo": {
+        "name": "Rosso Cielo",
+        "discord_id": "289985310321016833",
+        "class": "Sniper (ปืนเล็ก)",
+        "race": "Sankta",
+        "infected": "No",
+        "shield": "No",
+        "str": 2,
+        "dex": 4,
+        "int": 0,
+        "wis": 3,
+        "max_hp": 6,
+        "current_hp": 6,
+        "max_ap": 10,
+        "current_ap": 10,
+        "ac": 14,
+        "spd": 6,
+        "weapons": [
+          {
+            "slot": 1,
+            "name": "Cinis",
+            "damage": "2d6+DEX(4)",
+            "atk_bonus": 2,
+            "primary": true
+          },
+          {
+            "slot": 2,
+            "name": "Peekaboo gun",
+            "damage": "1",
+            "atk_bonus": 1,
+            "primary": false
+          }
+        ],
+        "accessories": [],
+        "modifiers": [
+          {
+            "name": "In the name of the lord",
+            "note": "จ่าย AP 2 Point เพื่อเพิ่มการโจมตี 1 ครั้งใน 1 เทิร์น ไม่จำกัดจำนวนครั้ง"
+          }
+        ],
+        "sheet_tab": "Rosso",
+        "is_npc": true,
+        "ranged": {
+          "1": {
+            "total": 35,
+            "unit": "นัด",
+            "mag_size": 15,
+            "current_in_mag": 15,
+            "per_shot": 1
+          }
+        }
+      },
+      "Desmond grey": {
+        "name": "Desmond grey",
+        "discord_id": "289985310321016833",
+        "class": "Guard",
+        "race": "Feline",
+        "infected": "Yes",
+        "shield": "No",
+        "str": 0,
+        "dex": 4,
+        "int": 0,
+        "wis": 0,
+        "max_hp": 8,
+        "current_hp": 8,
+        "max_ap": 15,
+        "current_ap": 15,
+        "ac": 14,
+        "spd": 6,
+        "weapons": [
+          {
+            "slot": 1,
+            "name": "punch",
+            "damage": "1d4+dex",
+            "atk_bonus": 0,
+            "primary": true
+          }
+        ],
+        "accessories": [],
+        "modifiers": [],
+        "sheet_tab": "Desmond",
+        "is_npc": true
+      }
+    },
+    "default": "Desmond grey"
+  },
+  "317913437130981376": {
+    "chars": {
+      "Wentear de' Torbani": {
+        "name": "Wentear de' Torbani",
+        "discord_id": "317913437130981376",
+        "class": "Sniper (หน้าไม้)",
+        "race": "Lupo",
+        "infected": "Yes",
+        "shield": "No",
+        "str": -1,
+        "dex": 3,
+        "int": -1,
+        "wis": 1,
+        "max_hp": 6,
+        "current_hp": 6,
+        "max_ap": 15,
+        "current_ap": 15,
+        "ac": 13,
+        "spd": 6,
+        "weapons": [
+          {
+            "slot": 1,
+            "name": "uva rossa หน้าไม้ (Upgrade+1)",
+            "damage": "1d8+dex",
+            "atk_bonus": 1,
+            "primary": true
+          },
+          {
+            "slot": 2,
+            "name": "มีดสั้น",
+            "damage": "1d5+dex",
+            "atk_bonus": 0,
+            "primary": false
+          }
+        ],
+        "accessories": [],
+        "modifiers": [
+          {
+            "name": "การข่มขู่",
+            "note": "ได้รับ adv ในการข่มขู่ หากข่มขู่คนในซิราคูซ่า +3"
+          },
+          {
+            "name": "Stealth",
+            "note": "Stealth +3"
+          },
+          {
+            "name": "การแกะรอย",
+            "note": "ได้ adv"
+          }
+        ],
+        "sheet_tab": "Wentear",
+        "ranged": {
+          "1": {
+            "total": 0,
+            "unit": "ดอก",
+            "mag_size": 20,
+            "current_in_mag": 19,
+            "per_shot": 1
+          }
+        }
+      }
+    },
+    "default": "Wentear de' Torbani"
+  },
+  "274923112976351234": {
+    "chars": {
+      "Amemura Saki": {
+        "name": "Amemura Saki",
+        "discord_id": "274923112976351234",
+        "class": "Guard",
+        "race": "Phidia",
+        "infected": "No",
+        "shield": "No",
+        "str": 2,
+        "dex": 2,
+        "int": -1,
+        "wis": -1,
+        "max_hp": 8,
+        "current_hp": 8,
+        "max_ap": 10,
+        "current_ap": 10,
+        "ac": 12,
+        "spd": 6,
+        "weapons": [
+          {
+            "slot": 1,
+            "name": "Sword",
+            "damage": "1d8+str",
+            "atk_bonus": 0,
+            "primary": true
+          },
+          {
+            "slot": 2,
+            "name": "Throwing knives",
+            "damage": "1d4+DEX(2)",
+            "atk_bonus": 0,
+            "primary": false
+          }
+        ],
+        "accessories": [],
+        "modifiers": [
+          {
+            "name": "การเจรจา",
+            "note": "Bonus +3"
+          },
+          {
+            "name": "ชำนาญอาวุธ",
+            "note": "Bomus +3"
+          },
+          {
+            "name": "การรับรู้",
+            "note": "Bomus +3"
+          },
+          {
+            "name": "การหลบหนี",
+            "note": "ได้รับ adv ในการทอยเพื่อหลบหนี"
+          },
+          {
+            "name": "Charisma",
+            "note": "Disadvantage กับกลุ่มที่ไม่รู้จักชาวฟิเดียพอ"
+          },
+          {
+            "name": "Penalty",
+            "note": "-2 เมื่อโดนโจมตีด้วยอาวุธหนักหรือการกระแทก"
+          }
+        ],
+        "sheet_tab": "Saki",
+        "ranged": {
+          "2": {
+            "total": 6,
+            "unit": "เล่ม",
+            "mag_size": 0,
+            "current_in_mag": 6,
+            "per_shot": 1
+          }
+        }
+      }
+    },
+    "default": "Amemura Saki"
+  }
+}
