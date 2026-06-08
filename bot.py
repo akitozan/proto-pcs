@@ -896,10 +896,10 @@ async def do_atk_roll(interaction: discord.Interaction, cd: dict, stat: str,
             if just_empty_stock:
                 ammo_note = f"💀 คุณเพิ่งใช้ของหมดคลังไป! ไม่สามารถ Reload ได้อีก\n🎯 ซอง: 0/{mag_size} {unit} — คลัง: 0 {unit} — รวม: 0 {unit}"
             elif just_empty_mag:
-                ammo_note = f"⚡ คุณเพิ่งใช้กระสุนหมดซองไป! กรุณา Reload ก่อนยิงครั้งถัดไป\n🎯 ซอง: 0/{mag_size} {unit} — คลัง: {r_fresh['total']} {unit} — รวม: {total_remaining} {unit}"
+                ammo_note = f"⚡ คุณเพิ่งใช้กระสุนหมดซองไป! (ใช้ไป {actual_per_shot} {unit}) กรุณา Reload ก่อนยิงครั้งถัดไป\n🎯 ซอง: 0/{mag_size} {unit} — คลัง: {r_fresh['total']} {unit} — รวม: {total_remaining} {unit}"
                 show_reload_btn = r_fresh["total"] > 0
             else:
-                ammo_note = f"🎯 ซอง: {r_fresh['current_in_mag']}/{mag_size} {unit} — คลัง: {r_fresh['total']} {unit} — รวม: {total_remaining} {unit}"
+                ammo_note = f"🎯 ซอง: {r_fresh['current_in_mag']}/{mag_size} {unit} (ใช้ไป {actual_per_shot}) — คลัง: {r_fresh['total']} {unit} — รวม: {total_remaining} {unit}"
         else:
             # ไม่มีซอง → หักจากคลังโดยตรง
             import re as _re
@@ -915,7 +915,7 @@ async def do_atk_roll(interaction: discord.Interaction, cd: dict, stat: str,
             if r_fresh["total"] <= 0:
                 ammo_note = f"💀 คุณเพิ่งใช้ของหมดคลังไป! ไม่สามารถ Reload ได้อีก\n🎯 จำนวนที่เหลือ: 0 {unit}"
             else:
-                ammo_note = f"🎯 จำนวนที่เหลือ: {r_fresh['total']} {unit}"
+                ammo_note = f"🎯 จำนวนที่เหลือ: {r_fresh['total']} {unit} (ใช้ไป {actual_per_shot})"
         update_char(user_id, char_name, cd_fresh)
 
     if final_roll == 1:
@@ -1268,13 +1268,63 @@ async def npc_check(interaction: discord.Interaction):
 
 # ── /initiative ────────────────────────────────────────────────────────────
 
+class InitiativeBonusModal(discord.ui.Modal, title="Initiative Bonus"):
+    bonus = discord.ui.TextInput(
+        label="โบนัส",
+        placeholder="เช่น +2 หรือ -1",
+        required=True)
+    def __init__(self, guild_id, adv_dis=None):
+        super().__init__()
+        self.guild_id = guild_id
+        self.adv_dis = adv_dis
+    async def on_submit(self, interaction: discord.Interaction):
+        val = self.bonus.value.strip()
+        import re as _re
+        if not _re.match(r"^[+\-]\d+$", val):
+            return await interaction.response.send_message(
+                embed=discord.Embed(description="[ ERROR ] — กรุณาใส่ `+2` หรือ `-1` (ต้องมี + หรือ - นำหน้า)", color=COLOR_ERROR),
+                ephemeral=True)
+        bonus_val = int(val)
+        _, cd = get_default_char(interaction.user.id)
+        if not cd:
+            return await interaction.response.send_message(
+                embed=discord.Embed(description="[ ERROR ] — ไม่พบตัวละคร Default กรุณาใช้ `/set-char` ก่อน", color=COLOR_ERROR),
+                ephemeral=True)
+        char_name = cd["name"]
+        if self.guild_id in initiative_active and char_name in initiative_active[self.guild_id]:
+            return await interaction.response.send_message(
+                embed=discord.Embed(description=f"[ WARNING ] — **{char_name}** ทอยไปแล้วในรอบนี้", color=COLOR_WARN),
+                ephemeral=True)
+        wis = cd["wis"]
+        r1 = random.randint(1, 20)
+        if self.adv_dis == "adv":
+            r2 = random.randint(1, 20)
+            roll = max(r1, r2)
+            roll_display = f"~~{min(r1,r2)}~~ → **{roll}** 🎲🎲 Advantage"
+        elif self.adv_dis == "dis":
+            r2 = random.randint(1, 20)
+            roll = min(r1, r2)
+            roll_display = f"~~{max(r1,r2)}~~ → **{roll}** 🎲🎲 Disadvantage"
+        else:
+            roll = r1
+            roll_display = f"**{roll}**"
+        total = roll + wis + bonus_val
+        if self.guild_id not in initiative_active:
+            initiative_active[self.guild_id] = {}
+        initiative_active[self.guild_id][char_name] = total
+        bonus_str = f" + Bonus({val})" if bonus_val else ""
+        embed = discord.Embed(
+            description=f"🎲 **{char_name}** ทอย Initiative ได้ **{total}** `d20({roll_display}) + WIS({wis}){bonus_str}`",
+            color=COLOR_CYAN)
+        await interaction.response.send_message(embed=embed)
+
+
 class InitiativeView(discord.ui.View):
     def __init__(self, guild_id):
         super().__init__(timeout=None)
         self.guild_id = guild_id
 
-    @discord.ui.button(label="🎲 Roll Initiative", style=discord.ButtonStyle.primary)
-    async def roll_init(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def do_roll(self, interaction: discord.Interaction, adv_dis: str = None):
         _, cd = get_default_char(interaction.user.id)
         if not cd:
             return await interaction.response.send_message(
@@ -1282,25 +1332,52 @@ class InitiativeView(discord.ui.View):
                 ephemeral=True)
 
         char_name = cd["name"]
-        # ป้องกันทอยซ้ำ
         if self.guild_id in initiative_active and char_name in initiative_active[self.guild_id]:
             return await interaction.response.send_message(
                 embed=discord.Embed(description=f"[ WARNING ] — **{char_name}** ทอยไปแล้วในรอบนี้", color=COLOR_WARN),
                 ephemeral=True)
 
         wis = cd["wis"]
-        roll = random.randint(1, 20)
+        r1 = random.randint(1, 20)
+
+        if adv_dis == "adv":
+            r2 = random.randint(1, 20)
+            roll = max(r1, r2)
+            roll_display = f"~~{min(r1,r2)}~~ → **{roll}** 🎲🎲 Advantage"
+        elif adv_dis == "dis":
+            r2 = random.randint(1, 20)
+            roll = min(r1, r2)
+            roll_display = f"~~{max(r1,r2)}~~ → **{roll}** 🎲🎲 Disadvantage"
+        else:
+            roll = r1
+            roll_display = f"**{roll}**"
+
         total = roll + wis
 
         if self.guild_id not in initiative_active:
             initiative_active[self.guild_id] = {}
         initiative_active[self.guild_id][char_name] = total
 
-        # โชว์ให้ทุกคนเห็น
         embed = discord.Embed(
-            description=f"🎲 **{char_name}** ทอย Initiative ได้ **{total}** `d20({roll}) + WIS({wis})`",
+            description=f"🎲 **{char_name}** ทอย Initiative ได้ **{total}** `d20({roll_display}) + WIS({wis})`",
             color=COLOR_CYAN)
         await interaction.response.send_message(embed=embed)
+
+    @discord.ui.button(label="🎲 Roll Initiative", style=discord.ButtonStyle.primary)
+    async def roll_init(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.do_roll(interaction)
+
+    @discord.ui.button(label="🎲 Advantage", style=discord.ButtonStyle.primary)
+    async def roll_adv(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.do_roll(interaction, adv_dis="adv")
+
+    @discord.ui.button(label="🎲 Disadvantage", style=discord.ButtonStyle.danger)
+    async def roll_dis(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.do_roll(interaction, adv_dis="dis")
+
+    @discord.ui.button(label="➕ Bonus", style=discord.ButtonStyle.secondary)
+    async def roll_bonus(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(InitiativeBonusModal(self.guild_id))
 
 @tree.command(name="initiative", description="[PRTS] เปิด Initiative Phase")
 async def initiative_cmd(interaction: discord.Interaction):
@@ -1316,20 +1393,37 @@ async def initiative_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view)
 
 @tree.command(name="initiative-npc", description="[PRTS] ทอย Initiative ให้ NPC หรือมอนสเตอร์")
-@app_commands.describe(name="ชื่อ NPC หรือมอนสเตอร์", bonus="bonus เพิ่มเติม เช่น 2 หรือ -1")
-async def initiative_npc(interaction: discord.Interaction, name: str, bonus: int = 0):
+@app_commands.describe(name="ชื่อ NPC หรือมอนสเตอร์", bonus="bonus เพิ่มเติม เช่น 2 หรือ -1", adv_dis="Advantage หรือ Disadvantage")
+@app_commands.choices(adv_dis=[
+    app_commands.Choice(name="Advantage", value="adv"),
+    app_commands.Choice(name="Disadvantage", value="dis"),
+])
+async def initiative_npc(interaction: discord.Interaction, name: str, bonus: int = 0, adv_dis: str = None):
     if not is_prts(interaction.user):
         return await interaction.response.send_message(
             embed=discord.Embed(description=f"[ ACCESS DENIED ] — {interaction.user.mention} : Insufficient clearance. PRTS Only.", color=COLOR_ERROR),
             ephemeral=True)
     if interaction.guild.id not in initiative_active:
         initiative_active[interaction.guild.id] = {}
-    roll = random.randint(1, 20)
+
+    r1 = random.randint(1, 20)
+    if adv_dis == "adv":
+        r2 = random.randint(1, 20)
+        roll = max(r1, r2)
+        roll_display = f"~~{min(r1,r2)}~~ → {roll} 🎲🎲 Advantage"
+    elif adv_dis == "dis":
+        r2 = random.randint(1, 20)
+        roll = min(r1, r2)
+        roll_display = f"~~{max(r1,r2)}~~ → {roll} 🎲🎲 Disadvantage"
+    else:
+        roll = r1
+        roll_display = str(roll)
+
     total = roll + bonus
     initiative_active[interaction.guild.id][name] = total
     bonus_str = fmt(bonus) if bonus else ""
     embed = discord.Embed(
-        description=f"🎲 **{name}** ทอยได้ **{total}** `d20({roll}){bonus_str}`\nซ่อนผลจนกว่าจะ /initiative-order",
+        description=f"🎲 **{name}** ทอยได้ **{total}** `d20({roll_display}){bonus_str}`\nซ่อนผลจนกว่าจะ /initiative-order",
         color=COLOR_PURPLE)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -1355,6 +1449,429 @@ async def initiative_order(interaction: discord.Interaction):
     embed.set_footer(text=f"Issued by: {interaction.user.display_name}")
     initiative_active.pop(interaction.guild.id, None)
     await interaction.response.send_message(embed=embed)
+
+# ── /ammo ──────────────────────────────────────────────────────────────────
+
+def get_ranged_weapons(cd: dict) -> dict:
+    return cd.get("ranged", {})
+
+def get_weapon_name(cd: dict, slot: int) -> str:
+    for w in cd.get("weapons", []):
+        if w["slot"] == slot:
+            return w["name"]
+    return f"Slot {slot}"
+
+def build_ammo_status_embed(char_name: str, cd: dict, slot: str) -> discord.Embed:
+    ranged = get_ranged_weapons(cd)
+    r = ranged[slot]
+    wpn_name = get_weapon_name(cd, int(slot))
+    unit = r["unit"]
+    total = r["total"]
+    mag_size = r["mag_size"]
+    current = r["current_in_mag"]
+    total_all = current + total
+    if mag_size == 0:
+        embed = discord.Embed(title=f"🎯 สถานะ — {wpn_name} (Slot {slot})", color=COLOR_INFO)
+        embed.add_field(name="🎒 จำนวนที่เหลือ", value=f"**{total}** {unit}", inline=True)
+        embed.add_field(name="⚡ ต่อช็อต", value=f"{r['per_shot']} {unit}", inline=True)
+    else:
+        embed = discord.Embed(title=f"🎯 สถานะ — {wpn_name} (Slot {slot})", color=COLOR_INFO)
+        embed.add_field(name="📦 ซอง", value=f"**{current} / {mag_size}** {unit}", inline=True)
+        embed.add_field(name="🎒 คลัง", value=f"**{total}** {unit}", inline=True)
+        embed.add_field(name="🔢 รวม", value=f"**{total_all}** {unit}", inline=True)
+        if current > 0:
+            shots_left = current // (r['per_shot'] if isinstance(r['per_shot'], int) else 1)
+            embed.add_field(name="\u200b", value=f"อีก {current} {unit} จะต้อง Reload", inline=False)
+    return embed
+
+
+class AmmoAddModal(discord.ui.Modal, title="เติมจำนวน"):
+    amount = discord.ui.TextInput(label="จำนวนที่ต้องการเติม", placeholder="เช่น 10", required=True)
+    def __init__(self, user_id, char_name, slot, view):
+        super().__init__()
+        self.user_id = user_id; self.char_name = char_name; self.slot = slot; self.sv = view
+    async def on_submit(self, interaction):
+        try:
+            amt = int(self.amount.value)
+            if amt <= 0: raise ValueError
+        except:
+            return await interaction.response.send_message(
+                embed=discord.Embed(description="[ ERROR ] — กรอกตัวเลขที่มากกว่า 0", color=COLOR_ERROR), ephemeral=True)
+        cd = get_char(self.user_id, self.char_name)
+        cd["ranged"][self.slot]["total"] += amt
+        update_char(self.user_id, self.char_name, cd)
+        embed = build_ammo_status_embed(self.char_name, cd, self.slot)
+        embed.set_footer(text=f"Operator: {interaction.user.display_name}")
+        await interaction.response.edit_message(embed=embed, view=self.sv)
+
+
+class AmmoReduceModal(discord.ui.Modal, title="ลดจำนวน"):
+    amount = discord.ui.TextInput(label="จำนวนที่ต้องการลด", placeholder="เช่น 5", required=True)
+    def __init__(self, user_id, char_name, slot, view):
+        super().__init__()
+        self.user_id = user_id; self.char_name = char_name; self.slot = slot; self.sv = view
+    async def on_submit(self, interaction):
+        try:
+            amt = int(self.amount.value)
+            if amt <= 0: raise ValueError
+        except:
+            return await interaction.response.send_message(
+                embed=discord.Embed(description="[ ERROR ] — กรอกตัวเลขที่มากกว่า 0", color=COLOR_ERROR), ephemeral=True)
+        cd = get_char(self.user_id, self.char_name)
+        cd["ranged"][self.slot]["total"] = max(0, cd["ranged"][self.slot]["total"] - amt)
+        update_char(self.user_id, self.char_name, cd)
+        embed = build_ammo_status_embed(self.char_name, cd, self.slot)
+        embed.set_footer(text=f"Operator: {interaction.user.display_name}")
+        await interaction.response.edit_message(embed=embed, view=self.sv)
+
+
+class AmmoUnloadModal(discord.ui.Modal, title="เอาออกจากซอง"):
+    amount = discord.ui.TextInput(label="จำนวนที่จะเอาออกจากซอง", placeholder="ใส่จำนวน หรือ 999 เพื่อเอาออกทั้งหมด", required=True)
+    def __init__(self, user_id, char_name, slot, view):
+        super().__init__()
+        self.user_id = user_id; self.char_name = char_name; self.slot = slot; self.sv = view
+    async def on_submit(self, interaction):
+        try:
+            amt = int(self.amount.value)
+            if amt <= 0: raise ValueError
+        except:
+            return await interaction.response.send_message(
+                embed=discord.Embed(description="[ ERROR ] — กรอกตัวเลขที่มากกว่า 0 หรือ 999", color=COLOR_ERROR), ephemeral=True)
+        cd = get_char(self.user_id, self.char_name)
+        r = cd["ranged"][self.slot]
+        cur = r["current_in_mag"]
+        actual = cur if amt >= 999 else min(amt, cur)
+        r["current_in_mag"] -= actual
+        r["total"] += actual
+        update_char(self.user_id, self.char_name, cd)
+        embed = build_ammo_status_embed(self.char_name, cd, self.slot)
+        embed.set_footer(text=f"↩️ เอาออกจากซอง {actual} {r['unit']} — Operator: {interaction.user.display_name}")
+        await interaction.response.edit_message(embed=embed, view=self.sv)
+
+
+class AmmoSetupModal(discord.ui.Modal, title="⚙️ Setup"):
+    total_input = discord.ui.TextInput(label="จำนวนที่มีทั้งหมด", placeholder="เช่น 50", required=True)
+    unit_input  = discord.ui.TextInput(label="สรรพนาม", placeholder="เช่น ลูก / ดอก / อัน / ชิ้น", required=True)
+    mag_input   = discord.ui.TextInput(label="ขนาดซอง (ถ้าไม่มีซองใส่ 000)", placeholder="เช่น 15 หรือ 000", required=True)
+    per_shot    = discord.ui.TextInput(label="จำนวนที่ใช้ต่อช็อต", placeholder="เช่น 1 (ปกติ) หรือ 2 (ลูกซองแฝด) หรือ 2d6 (ปืนกล)", required=True)
+    def __init__(self, user_id, char_name, slot):
+        super().__init__()
+        self.user_id = user_id; self.char_name = char_name; self.slot = str(slot)
+    async def on_submit(self, interaction):
+        try: total = int(self.total_input.value); assert total >= 0
+        except: return await interaction.response.send_message(
+            embed=discord.Embed(description="[ ERROR ] — จำนวนต้องเป็นตัวเลข >= 0", color=COLOR_ERROR), ephemeral=True)
+        unit = self.unit_input.value.strip()
+        try:
+            mag_raw = self.mag_input.value.strip()
+            mag = 0 if mag_raw == "000" else int(mag_raw)
+            assert mag >= 0
+        except: return await interaction.response.send_message(
+            embed=discord.Embed(description="[ ERROR ] — ขนาดซองต้องเป็นตัวเลข หรือ 000", color=COLOR_ERROR), ephemeral=True)
+        per_raw = self.per_shot.value.strip()
+        import re as _re
+        if _re.match(r"^\d+d\d+$", per_raw):
+            per = per_raw
+        else:
+            try: per = int(per_raw); assert per >= 1
+            except: return await interaction.response.send_message(
+                embed=discord.Embed(description="[ ERROR ] — จำนวนต่อช็อตต้องเป็นตัวเลข เช่น 1, 2 หรือ 2d6", color=COLOR_ERROR), ephemeral=True)
+        stock = max(0, total - mag) if mag > 0 else total
+        cd = get_char(self.user_id, self.char_name)
+        if "ranged" not in cd: cd["ranged"] = {}
+
+        # ถ้ามีข้อมูลเดิมอยู่แล้ว → เตือนก่อน
+        if self.slot in cd["ranged"]:
+            old = cd["ranged"][self.slot]
+            old_total = old["current_in_mag"] + old["total"]
+            class OverwriteConfirmView(discord.ui.View):
+                def __init__(self_v):
+                    super().__init__(timeout=30)
+                    self_v.new_stock = stock
+                    self_v.new_mag = mag
+                    self_v.new_total = total
+                    self_v.new_unit = unit
+                    self_v.new_per = per
+
+                @discord.ui.button(label="✅ ยืนยัน ทับข้อมูลเดิม", style=discord.ButtonStyle.danger)
+                async def confirm(self_v, inter, button):
+                    if inter.user.id != self.user_id: return
+                    cd2 = get_char(self.user_id, self.char_name)
+                    if "ranged" not in cd2: cd2["ranged"] = {}
+                    cd2["ranged"][self.slot] = {"total": self_v.new_stock, "unit": self_v.new_unit, "mag_size": mag, "current_in_mag": mag if mag > 0 else self_v.new_total, "per_shot": self_v.new_per}
+                    update_char(self.user_id, self.char_name, cd2)
+                    wpn_name = get_weapon_name(cd2, int(self.slot))
+                    embed = discord.Embed(title="[ LONG-RANGE SETUP COMPLETE ]",
+                        description=f"อัปเดตข้อมูลอาวุธระยะไกลสำหรับ **{wpn_name} (Slot {self.slot})** เรียบร้อยแล้ว", color=COLOR_INFO)
+                    embed.set_footer(text=f"Operator: {inter.user.display_name}")
+                    self_v.stop()
+                    await inter.response.edit_message(embed=embed, view=None)
+
+                @discord.ui.button(label="❌ ยกเลิก", style=discord.ButtonStyle.secondary)
+                async def cancel(self_v, inter, button):
+                    if inter.user.id != self.user_id: return
+                    self_v.stop()
+                    await inter.response.edit_message(embed=discord.Embed(description="[ CANCELLED ] — ยกเลิกแล้ว", color=COLOR_INFO), view=None)
+
+            wpn_name = get_weapon_name(cd, int(self.slot))
+            warn_embed = discord.Embed(
+                title="⚠️ [ WARNING ] — มีข้อมูลอยู่แล้ว",
+                description=f"**{wpn_name} (Slot {self.slot})** มีข้อมูลอาวุธระยะไกลอยู่แล้ว\nรวมทั้งหมด: **{old_total} {old['unit']}**\n\nถ้ายืนยัน ข้อมูลเดิมจะหายไปถาวร",
+                color=COLOR_WARN)
+            return await interaction.response.send_message(embed=warn_embed, view=OverwriteConfirmView(), ephemeral=True)
+        cd["ranged"][self.slot] = {"total": stock, "unit": unit, "mag_size": mag, "current_in_mag": mag if mag > 0 else total, "per_shot": per}
+        update_char(self.user_id, self.char_name, cd)
+        wpn_name = get_weapon_name(cd, int(self.slot))
+        embed = discord.Embed(title="[ LONG-RANGE SETUP COMPLETE ]",
+            description=f"ตั้งค่าระบบอาวุธระยะไกลสำหรับ **{wpn_name} (Slot {self.slot})** เรียบร้อยแล้ว", color=COLOR_INFO)
+        embed.add_field(name="🎯 จำนวนที่มีทั้งหมด", value=f"{total} {unit}", inline=True)
+        if mag > 0: embed.add_field(name="📦 ซอง", value=f"{mag}/{mag} {unit}", inline=True)
+        embed.add_field(name="⚡ ต่อช็อต", value=f"{per} {unit}", inline=True)
+        embed.set_footer(text=f"Operator: {interaction.user.display_name}")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class AmmoAdjustView(discord.ui.View):
+    def __init__(self, user_id, char_name, slot):
+        super().__init__(timeout=300)
+        self.user_id = user_id; self.char_name = char_name; self.slot = slot
+        cd = get_char(user_id, char_name)
+        r = cd.get("ranged", {}).get(slot, {})
+        if r.get("mag_size", 0) > 0:
+            unload_btn = discord.ui.Button(label="↩️ เอาออกจากซอง", style=discord.ButtonStyle.secondary, row=1)
+            async def unload_callback(inter, _uid=user_id, _cn=char_name, _slot=slot):
+                if inter.user.id != _uid:
+                    return await inter.response.send_message(embed=discord.Embed(description="[ ACCESS DENIED ]", color=COLOR_ERROR), ephemeral=True)
+                await inter.response.send_modal(AmmoUnloadModal(_uid, _cn, _slot, self))
+            unload_btn.callback = unload_callback
+            self.add_item(unload_btn)
+
+    async def check_owner(self, interaction):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(embed=discord.Embed(description="[ ACCESS DENIED ]", color=COLOR_ERROR), ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item):
+        await interaction.response.send_message(
+            embed=discord.Embed(description="[ ERROR ] — แผงนี้หมดอายุแล้ว กรุณาใช้ `/ammo` ใหม่อีกครั้ง", color=COLOR_ERROR),
+            ephemeral=True)
+
+    @discord.ui.button(label="🔄 Reload", style=discord.ButtonStyle.primary, row=0)
+    async def reload_btn(self, interaction, button):
+        if not await self.check_owner(interaction): return
+        cd = get_char(self.user_id, self.char_name)
+        r = cd["ranged"][self.slot]
+        mag = r["mag_size"]; unit = r["unit"]
+        if mag == 0:
+            return await interaction.response.send_message(embed=discord.Embed(description="[ ERROR ] — อาวุธนี้ไม่มีระบบซอง", color=COLOR_ERROR), ephemeral=True)
+        needed = mag - r["current_in_mag"]
+        actual = min(needed, r["total"])
+        r["current_in_mag"] += actual; r["total"] -= actual
+        update_char(self.user_id, self.char_name, cd)
+        if actual < needed:
+            desc = f"Reload ได้แค่ **{actual} {unit}** (ในคลังมีไม่พอบรรจุให้เต็มซอง)\nซอง: {r['current_in_mag']}/{mag} {unit} — คลัง: {r['total']} {unit}"
+        else:
+            desc = f"Reload สำเร็จ!\nซอง: {r['current_in_mag']}/{mag} {unit} — คลัง: {r['total']} {unit}"
+        reload_embed = discord.Embed(title="🔄 [ RELOAD ]", description=desc, color=0x2DB87A)
+        reload_embed.set_footer(text=f"Operator: {interaction.user.display_name}")
+        status_embed = build_ammo_status_embed(self.char_name, cd, self.slot)
+        status_embed.set_footer(text=f"Operator: {interaction.user.display_name}")
+        await interaction.response.edit_message(embed=status_embed, view=self)
+        await interaction.followup.send(embed=reload_embed, ephemeral=True)
+
+    @discord.ui.button(label="➕ เติมจำนวน", style=discord.ButtonStyle.success, row=0)
+    async def add_btn(self, interaction, button):
+        if not await self.check_owner(interaction): return
+        await interaction.response.send_modal(AmmoAddModal(self.user_id, self.char_name, self.slot, self))
+
+    @discord.ui.button(label="➖ ลดจำนวน", style=discord.ButtonStyle.danger, row=0)
+    async def reduce_btn(self, interaction, button):
+        if not await self.check_owner(interaction): return
+        await interaction.response.send_modal(AmmoReduceModal(self.user_id, self.char_name, self.slot, self))
+
+
+class AmmoClearConfirmView(discord.ui.View):
+    def __init__(self, user_id, char_name, slot):
+        super().__init__(timeout=30)
+        self.user_id = user_id; self.char_name = char_name; self.slot = slot
+
+    @discord.ui.button(label="✅ ยืนยัน", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction, button):
+        if interaction.user.id != self.user_id: return
+        cd = get_char(self.user_id, self.char_name)
+        if "ranged" in cd and self.slot in cd["ranged"]: del cd["ranged"][self.slot]
+        update_char(self.user_id, self.char_name, cd)
+        self.stop()
+        wpn_name = get_weapon_name(cd, int(self.slot))
+        await interaction.response.edit_message(embed=discord.Embed(
+            description=f"[ COMPLETE ] — ลบสถานะอาวุธระยะไกลของ **{wpn_name} (Slot {self.slot})** ออกแล้ว", color=COLOR_INFO), view=None)
+
+    @discord.ui.button(label="❌ ยกเลิก", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction, button):
+        if interaction.user.id != self.user_id: return
+        self.stop()
+        await interaction.response.edit_message(embed=discord.Embed(description="[ CANCELLED ]", color=COLOR_INFO), view=None)
+
+
+async def do_ammo_reload(interaction, user_id, char_name, slot, ephemeral=True):
+    cd = get_char(user_id, char_name)
+    r = cd["ranged"][slot]
+    mag = r["mag_size"]; unit = r["unit"]
+    if mag == 0:
+        return await interaction.response.send_message(embed=discord.Embed(description="[ ERROR ] — อาวุธนี้ไม่มีระบบซอง", color=COLOR_ERROR), ephemeral=True)
+    needed = mag - r["current_in_mag"]
+    actual = min(needed, r["total"])
+    r["current_in_mag"] += actual; r["total"] -= actual
+    update_char(user_id, char_name, cd)
+    if actual < needed:
+        desc = f"Reload ได้แค่ **{actual} {unit}** (ในคลังมีไม่พอบรรจุให้เต็มซอง)\nซอง: {r['current_in_mag']}/{mag} {unit} — คลัง: {r['total']} {unit}"
+    else:
+        desc = f"Reload สำเร็จ!\nซอง: {r['current_in_mag']}/{mag} {unit} — คลัง: {r['total']} {unit}"
+    embed = discord.Embed(title="🔄 [ RELOAD ]", description=desc, color=0x2DB87A)
+    embed.set_footer(text=f"Operator: {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
+
+
+class AmmoReloadSelectView(discord.ui.View):
+    def __init__(self, user_id, char_name, ranged_slots, cd):
+        super().__init__(timeout=60)
+        self.user_id = user_id; self.char_name = char_name
+        options = [discord.SelectOption(
+            label=f"Slot {s} — {get_weapon_name(cd, int(s))}",
+            description=f"{r['current_in_mag']}/{r['mag_size']} {r['unit']}" if r['mag_size'] > 0 else f"{r['total']} {r['unit']}",
+            value=s) for s, r in ranged_slots.items()]
+        select = discord.ui.Select(placeholder="เลือกอาวุธที่จะ Reload", options=options)
+        select.callback = self.on_select
+        self.add_item(select)
+
+    async def on_select(self, interaction):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message(embed=discord.Embed(description="[ ACCESS DENIED ]", color=COLOR_ERROR), ephemeral=True)
+        slot = interaction.data["values"][0]
+        for item in self.children: item.disabled = True
+        await interaction.response.edit_message(view=self)
+        await do_ammo_reload(interaction, self.user_id, self.char_name, slot)
+
+
+class AmmoMainView(discord.ui.View):
+    def __init__(self, user_id, char_name):
+        super().__init__(timeout=120)
+        self.user_id = user_id; self.char_name = char_name
+
+    async def check_owner(self, interaction):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(embed=discord.Embed(description="[ ACCESS DENIED ]", color=COLOR_ERROR), ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="⚙️ Setup", style=discord.ButtonStyle.primary, row=0)
+    async def setup_btn(self, interaction, button):
+        if not await self.check_owner(interaction): return
+        cd = get_char(self.user_id, self.char_name)
+        weapons = [w for w in cd.get("weapons", []) if w.get("name")]
+        if not weapons:
+            return await interaction.response.send_message(embed=discord.Embed(description="[ ERROR ] — ไม่พบข้อมูลอาวุธ กรุณา sync ก่อน", color=COLOR_ERROR), ephemeral=True)
+        if len(weapons) == 1:
+            await interaction.response.send_modal(AmmoSetupModal(self.user_id, self.char_name, weapons[0]["slot"]))
+        else:
+            options = [discord.SelectOption(label=f"Slot {w['slot']} — {w['name']}", value=str(w["slot"])) for w in weapons]
+            embed = discord.Embed(title="⚙️ Setup — เลือกอาวุธที่จะลงทะเบียน", description="แสดงเฉพาะอาวุธที่กรอกข้อมูลไว้ในชีทแล้ว", color=COLOR_INFO)
+            embed.set_footer(text=f"Operator: {interaction.user.display_name}")
+            view = discord.ui.View(timeout=60)
+            select = discord.ui.Select(placeholder="เลือกอาวุธ", options=options)
+            async def on_select(inter):
+                await inter.response.send_modal(AmmoSetupModal(self.user_id, self.char_name, int(inter.data["values"][0])))
+            select.callback = on_select
+            view.add_item(select)
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    @discord.ui.button(label="🎯 Adjust Ammo", style=discord.ButtonStyle.success, row=0)
+    async def adjust_btn(self, interaction, button):
+        if not await self.check_owner(interaction): return
+        cd = get_char(self.user_id, self.char_name)
+        ranged = get_ranged_weapons(cd)
+        if not ranged:
+            return await interaction.response.send_message(embed=discord.Embed(description="[ ERROR ] — ยังไม่มีอาวุธระยะไกล กรุณาใช้ Setup ก่อน", color=COLOR_ERROR), ephemeral=True)
+        if len(ranged) == 1:
+            slot = list(ranged.keys())[0]
+            embed = build_ammo_status_embed(self.char_name, cd, slot)
+            embed.set_footer(text=f"Operator: {interaction.user.display_name}")
+            await interaction.response.send_message(embed=embed, view=AmmoAdjustView(self.user_id, self.char_name, slot), ephemeral=True)
+        else:
+            options = [discord.SelectOption(label=f"Slot {s} — {get_weapon_name(cd, int(s))}", description=f"{r['total']} {r['unit']}", value=s) for s, r in ranged.items()]
+            view = discord.ui.View(timeout=60)
+            select = discord.ui.Select(placeholder="เลือกอาวุธ", options=options)
+            async def on_select(inter):
+                slot = inter.data["values"][0]
+                embed = build_ammo_status_embed(self.char_name, cd, slot)
+                embed.set_footer(text=f"Operator: {inter.user.display_name}")
+                await inter.response.edit_message(embed=embed, view=AmmoAdjustView(self.user_id, self.char_name, slot))
+            select.callback = on_select
+            view.add_item(select)
+            await interaction.response.send_message(embed=discord.Embed(title="🎯 Adjust Ammo — เลือกอาวุธ", color=COLOR_INFO), view=view, ephemeral=True)
+
+    @discord.ui.button(label="🔄 Reload", style=discord.ButtonStyle.secondary, row=0)
+    async def reload_btn(self, interaction, button):
+        if not await self.check_owner(interaction): return
+        cd = get_char(self.user_id, self.char_name)
+        ranged = {s: r for s, r in get_ranged_weapons(cd).items() if r.get("mag_size", 0) > 0}
+        if not ranged:
+            return await interaction.response.send_message(embed=discord.Embed(description="[ ERROR ] — ไม่มีอาวุธระยะไกลที่มีระบบซอง", color=COLOR_ERROR), ephemeral=True)
+        if len(ranged) == 1:
+            await do_ammo_reload(interaction, self.user_id, self.char_name, list(ranged.keys())[0])
+        else:
+            await interaction.response.send_message(embed=discord.Embed(title="🔄 Reload — เลือกอาวุธ", color=COLOR_INFO),
+                view=AmmoReloadSelectView(self.user_id, self.char_name, ranged, cd), ephemeral=True)
+
+    @discord.ui.button(label="🗑️ Clear", style=discord.ButtonStyle.danger, row=0)
+    async def clear_btn(self, interaction, button):
+        if not await self.check_owner(interaction): return
+        cd = get_char(self.user_id, self.char_name)
+        ranged = get_ranged_weapons(cd)
+        if not ranged:
+            return await interaction.response.send_message(embed=discord.Embed(description="[ ERROR ] — ไม่มีอาวุธระยะไกลที่ลงทะเบียนไว้", color=COLOR_ERROR), ephemeral=True)
+        if len(ranged) == 1:
+            slot = list(ranged.keys())[0]
+            wpn_name = get_weapon_name(cd, int(slot))
+            embed = discord.Embed(title="[ WARNING ] — ลบสถานะอาวุธระยะไกล",
+                description=f"กำลังจะลบสถานะการเป็นอาวุธระยะไกลทั้งหมดของ **{wpn_name} (Slot {slot})** ออก\n\n• จำนวนที่เหลือทั้งหมดจะหายไปถาวร\n• อาวุธชิ้นนี้จะไม่ถูกนับเป็นอาวุธระยะไกลอีกต่อไป\n• การกระทำนี้ไม่สามารถยกเลิกได้",
+                color=COLOR_FUMBLE)
+            await interaction.response.send_message(embed=embed, view=AmmoClearConfirmView(self.user_id, self.char_name, slot), ephemeral=True)
+        else:
+            options = [discord.SelectOption(label=f"Slot {s} — {get_weapon_name(cd, int(s))}", description=f"{r['total']} {r['unit']}", value=s) for s, r in ranged.items()]
+            view = discord.ui.View(timeout=60)
+            select = discord.ui.Select(placeholder="เลือกอาวุธที่จะลบ", options=options)
+            async def on_select(inter):
+                slot = inter.data["values"][0]
+                wpn_name = get_weapon_name(cd, int(slot))
+                embed = discord.Embed(title="[ WARNING ] — ลบสถานะอาวุธระยะไกล",
+                    description=f"กำลังจะลบสถานะการเป็นอาวุธระยะไกลทั้งหมดของ **{wpn_name} (Slot {slot})** ออก\n\n• จำนวนที่เหลือทั้งหมดจะหายไปถาวร\n• อาวุธชิ้นนี้จะไม่ถูกนับเป็นอาวุธระยะไกลอีกต่อไป\n• การกระทำนี้ไม่สามารถยกเลิกได้",
+                    color=COLOR_FUMBLE)
+                await inter.response.edit_message(embed=embed, view=AmmoClearConfirmView(self.user_id, self.char_name, slot))
+            select.callback = on_select
+            view.add_item(select)
+            await interaction.response.send_message(embed=discord.Embed(title="🗑️ Clear — เลือกอาวุธที่จะลบ", color=COLOR_INFO), view=view, ephemeral=True)
+
+
+@tree.command(name="ammo", description="จัดการระบบอาวุธระยะไกล")
+@app_commands.describe(char="ชื่อตัวละคร (ไม่ใส่ = default)")
+async def ammo_cmd(interaction: discord.Interaction, char: str = None):
+    char_name, cd, err = resolve_char(interaction.user.id, char)
+    if err: return await interaction.response.send_message(embed=err, ephemeral=True)
+    embed = discord.Embed(title="🎯 ระบบอาวุธระยะไกล",
+        description=("**⚙️ Setup** — ลงทะเบียนอาวุธให้เป็นอาวุธระยะไกล\n"
+                     "**🎯 Adjust Ammo** — ดูสถานะและปรับจำนวนที่เหลือ พร้อมปุ่ม Reload\n"
+                     "**🔄 Reload** — เติมซองทันที\n"
+                     "**🗑️ Clear** — ลบสถานะอาวุธระยะไกลออก"),
+        color=COLOR_INFO)
+    embed.set_footer(text=f"Operator: {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed, view=AmmoMainView(interaction.user.id, char_name), ephemeral=True)
+
 
 # ── /help ──────────────────────────────────────────────────────────────────
 
