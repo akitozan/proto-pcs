@@ -1873,6 +1873,256 @@ async def ammo_cmd(interaction: discord.Interaction, char: str = None):
     await interaction.response.send_message(embed=embed, view=AmmoMainView(interaction.user.id, char_name), ephemeral=True)
 
 
+# ── /party ─────────────────────────────────────────────────────────────────
+
+def load_parties() -> dict:
+    data = load_data()
+    return data.get("_parties", {})
+
+def save_parties(parties: dict):
+    data = load_data()
+    data["_parties"] = parties
+    save_data(data)
+
+def build_party_embed(party_name: str, party: dict) -> discord.Embed:
+    embed = discord.Embed(
+        title=f"🏦 Party Wallet — {party_name}",
+        color=COLOR_INFO)
+    embed.add_field(name="💰 เงิน", value=f"**{party.get('gold', 0):,} LMD**", inline=False)
+    items = party.get("key_items", [])
+    if items:
+        item_lines = "\n".join(f"• **{it['name']}** — {it['desc']}" for it in items)
+        embed.add_field(name="🗝️ Key Items", value=item_lines, inline=False)
+    else:
+        embed.add_field(name="🗝️ Key Items", value="ยังไม่มี Key Item", inline=False)
+    return embed
+
+
+class PartyWalletModal(discord.ui.Modal, title="สร้าง / อัปเดตกระเป๋าเงินปาร์ตี้"):
+    party_name = discord.ui.TextInput(label="ชื่อปาร์ตี้", placeholder="เช่น ทีม Rhodes Island", required=True)
+    gold = discord.ui.TextInput(label="จำนวน LMD ตอนนี้", placeholder="เช่น 500", required=True)
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            amount = int(self.gold.value.replace(",", ""))
+            assert amount >= 0
+        except:
+            return await interaction.response.send_message(
+                embed=discord.Embed(description="[ ERROR ] — จำนวน LMD ต้องเป็นตัวเลข >= 0", color=COLOR_ERROR), ephemeral=True)
+        parties = load_parties()
+        name = self.party_name.value.strip()
+        if name not in parties:
+            parties[name] = {"gold": amount, "key_items": []}
+        else:
+            parties[name]["gold"] = amount
+        save_parties(parties)
+        embed = discord.Embed(
+            description=f"[ COMPLETE ] — บันทึกกระเป๋าเงินของ **{name}** เรียบร้อยแล้ว\n💰 {amount:,} LMD",
+            color=COLOR_INFO)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class PartyItemAddModal(discord.ui.Modal, title="เพิ่ม Key Item"):
+    item_name = discord.ui.TextInput(label="ชื่อไอเทม", placeholder="เช่น แผนที่โบราณ", required=True)
+    item_desc = discord.ui.TextInput(label="คำอธิบาย", placeholder="เช่น แผนที่ที่นำไปสู่ขุมทรัพย์", required=True, style=discord.TextStyle.paragraph)
+    def __init__(self, party_name: str, check_view=None, parent_interaction=None):
+        super().__init__()
+        self.party_name = party_name
+        self.check_view = check_view
+        self.parent_interaction = parent_interaction
+    async def on_submit(self, interaction: discord.Interaction):
+        parties = load_parties()
+        if self.party_name not in parties:
+            return await interaction.response.send_message(
+                embed=discord.Embed(description="[ ERROR ] — ไม่พบปาร์ตี้นี้", color=COLOR_ERROR), ephemeral=True)
+        parties[self.party_name]["key_items"].append({
+            "name": self.item_name.value.strip(),
+            "desc": self.item_desc.value.strip()
+        })
+        save_parties(parties)
+        embed = build_party_embed(self.party_name, parties[self.party_name])
+        # แจ้งว่าเพิ่มสำเร็จ
+        await interaction.response.send_message(
+            embed=discord.Embed(description=f"[ COMPLETE ] — เพิ่ม **{self.item_name.value}** ให้ **{self.party_name}** แล้ว", color=COLOR_INFO),
+            ephemeral=True)
+        # อัปเดต embed หลักผ่าน followup ของ parent interaction
+        if self.check_view and self.parent_interaction:
+            try:
+                await self.parent_interaction.edit_original_response(embed=embed, view=self.check_view)
+            except: pass
+
+
+class PartyGoldModal(discord.ui.Modal, title="เพิ่ม / ลด LMD"):
+    add_amount = discord.ui.TextInput(label="เพิ่ม LMD (ไม่บังคับ)", placeholder="เช่น 200", required=False)
+    cut_amount = discord.ui.TextInput(label="ลด LMD (ไม่บังคับ)", placeholder="เช่น 100", required=False)
+    def __init__(self, party_name: str, view):
+        super().__init__()
+        self.party_name = party_name
+        self.pv = view
+    async def on_submit(self, interaction: discord.Interaction):
+        parties = load_parties()
+        party = parties.get(self.party_name)
+        if not party:
+            return await interaction.response.send_message(
+                embed=discord.Embed(description="[ ERROR ] — ไม่พบปาร์ตี้นี้", color=COLOR_ERROR), ephemeral=True)
+        add_val = 0
+        cut_val = 0
+        try:
+            if self.add_amount.value.strip():
+                add_val = int(self.add_amount.value.replace(",", ""))
+                assert add_val >= 0
+        except:
+            return await interaction.response.send_message(
+                embed=discord.Embed(description="[ ERROR ] — จำนวนที่เพิ่มต้องเป็นตัวเลข >= 0", color=COLOR_ERROR), ephemeral=True)
+        try:
+            if self.cut_amount.value.strip():
+                cut_val = int(self.cut_amount.value.replace(",", ""))
+                assert cut_val >= 0
+        except:
+            return await interaction.response.send_message(
+                embed=discord.Embed(description="[ ERROR ] — จำนวนที่ลดต้องเป็นตัวเลข >= 0", color=COLOR_ERROR), ephemeral=True)
+        old = party["gold"]
+        party["gold"] = max(0, old + add_val - cut_val)
+        save_parties(parties)
+        embed = build_party_embed(self.party_name, party)
+        await interaction.response.edit_message(embed=embed, view=self.pv)
+
+
+class PartyManageView(discord.ui.View):
+    def __init__(self, party_name: str, is_prts_user: bool):
+        super().__init__(timeout=300)
+        self.party_name = party_name
+        self.is_prts_user = is_prts_user
+
+    async def check_prts(self, interaction: discord.Interaction) -> bool:
+        if not self.is_prts_user:
+            await interaction.response.send_message(
+                embed=discord.Embed(description="[ ACCESS DENIED ] — PRTS Only", color=COLOR_ERROR), ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="💰 เพิ่ม/ลด LMD", style=discord.ButtonStyle.primary)
+    async def gold_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self.check_prts(interaction): return
+        await interaction.response.send_modal(PartyGoldModal(self.party_name, self))
+
+    @discord.ui.button(label="🗝️ จัดการ Key Items", style=discord.ButtonStyle.secondary)
+    async def items_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self.check_prts(interaction): return
+        parties = load_parties()
+        party = parties.get(self.party_name, {})
+        items = party.get("key_items", [])
+        view = PartyItemManageView(self.party_name, items, self, interaction)
+        await interaction.response.send_message(
+            embed=discord.Embed(title=f"🗝️ จัดการ Key Items — {self.party_name}", color=COLOR_INFO),
+            view=view, ephemeral=True)
+
+
+class PartyItemManageView(discord.ui.View):
+    def __init__(self, party_name: str, items: list, parent_view, parent_interaction=None):
+        super().__init__(timeout=120)
+        self.party_name = party_name
+        self.items = items
+        self.parent_view = parent_view
+        self.parent_interaction = parent_interaction
+
+    @discord.ui.button(label="➕ เพิ่ม Key Item", style=discord.ButtonStyle.success)
+    async def add_item(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(
+            PartyItemAddModal(self.party_name, self.parent_view, self.parent_interaction))
+
+    @discord.ui.button(label="🗑️ ลบ Key Item", style=discord.ButtonStyle.danger)
+    async def remove_item(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.items:
+            return await interaction.response.send_message(
+                embed=discord.Embed(description="[ ERROR ] — ยังไม่มี Key Item", color=COLOR_ERROR), ephemeral=True)
+        options = [discord.SelectOption(label=it["name"], description=it["desc"][:50], value=str(i))
+                   for i, it in enumerate(self.items)]
+        view = discord.ui.View(timeout=60)
+        select = discord.ui.Select(placeholder="เลือก Key Item ที่จะลบ", options=options)
+        async def on_select(inter):
+            idx = int(inter.data["values"][0])
+            parties = load_parties()
+            removed = parties[self.party_name]["key_items"].pop(idx)
+            save_parties(parties)
+            embed = build_party_embed(self.party_name, parties[self.party_name])
+            await inter.response.edit_message(
+                embed=discord.Embed(description=f"[ COMPLETE ] — ลบ **{removed['name']}** ออกแล้ว", color=COLOR_INFO),
+                view=None)
+            # อัปเดต embed หลักผ่าน parent_interaction
+            if self.parent_interaction:
+                try:
+                    await self.parent_interaction.edit_original_response(embed=embed, view=self.parent_view)
+                except: pass
+        select.callback = on_select
+        view.add_item(select)
+        await interaction.response.send_message(
+            embed=discord.Embed(title="🗑️ เลือก Key Item ที่จะลบ", color=COLOR_INFO),
+            view=view, ephemeral=True)
+
+
+@tree.command(name="party-wallet", description="[PRTS] สร้างหรืออัปเดตกระเป๋าเงินปาร์ตี้")
+async def party_wallet(interaction: discord.Interaction):
+    if not is_prts(interaction.user):
+        return await interaction.response.send_message(
+            embed=discord.Embed(description=f"[ ACCESS DENIED ] — PRTS Only", color=COLOR_ERROR), ephemeral=True)
+    await interaction.response.send_modal(PartyWalletModal())
+
+
+@tree.command(name="party-item", description="[PRTS] เพิ่ม Key Item ให้ปาร์ตี้")
+@app_commands.describe(party="ชื่อปาร์ตี้ที่จะเพิ่มไอเทม")
+async def party_item(interaction: discord.Interaction, party: str = None):
+    if not is_prts(interaction.user):
+        return await interaction.response.send_message(
+            embed=discord.Embed(description=f"[ ACCESS DENIED ] — PRTS Only", color=COLOR_ERROR), ephemeral=True)
+    parties = load_parties()
+    if not parties:
+        return await interaction.response.send_message(
+            embed=discord.Embed(description="[ ERROR ] — ยังไม่มีปาร์ตี้ กรุณาใช้ `/party-wallet` ก่อน", color=COLOR_ERROR), ephemeral=True)
+    if party and party in parties:
+        await interaction.response.send_modal(PartyItemAddModal(party))
+    elif len(parties) == 1:
+        await interaction.response.send_modal(PartyItemAddModal(list(parties.keys())[0]))
+    else:
+        options = [discord.SelectOption(label=n, value=n) for n in parties]
+        view = discord.ui.View(timeout=60)
+        select = discord.ui.Select(placeholder="เลือกปาร์ตี้", options=options)
+        async def on_select(inter):
+            await inter.response.send_modal(PartyItemAddModal(inter.data["values"][0]))
+        select.callback = on_select
+        view.add_item(select)
+        await interaction.response.send_message(
+            embed=discord.Embed(title="เลือกปาร์ตี้ที่จะเพิ่ม Key Item", color=COLOR_INFO),
+            view=view, ephemeral=True)
+
+
+@tree.command(name="party-check", description="ดูเงินและ Key Items ของปาร์ตี้")
+async def party_check(interaction: discord.Interaction):
+    parties = load_parties()
+    if not parties:
+        return await interaction.response.send_message(
+            embed=discord.Embed(description="[ ERROR ] — ยังไม่มีปาร์ตี้ กรุณาให้ PRTS ใช้ `/party-wallet` ก่อน", color=COLOR_ERROR), ephemeral=True)
+    if len(parties) == 1:
+        name = list(parties.keys())[0]
+        party = parties[name]
+        embed = build_party_embed(name, party)
+        view = PartyManageView(name, is_prts(interaction.user))
+        return await interaction.response.send_message(embed=embed, view=view)
+    options = [discord.SelectOption(label=n, description=f"{p.get('gold',0):,} LMD", value=n) for n, p in parties.items()]
+    class PartySelectView(discord.ui.View):
+        def __init__(self_v):
+            super().__init__(timeout=60)
+        @discord.ui.select(placeholder="เลือกปาร์ตี้ที่ต้องการดู", options=options)
+        async def on_select(self_v, inter, select):
+            pname = select.values[0]
+            party = load_parties().get(pname, {})
+            embed = build_party_embed(pname, party)
+            view = PartyManageView(pname, is_prts(inter.user))
+            await inter.response.edit_message(embed=embed, view=view)
+    await interaction.response.send_message(
+        embed=discord.Embed(title="🏦 เลือกปาร์ตี้ที่ต้องการดู", color=COLOR_INFO),
+        view=PartySelectView())
+
+
 # ── /help ──────────────────────────────────────────────────────────────────
 
 HELP_OPTIONS = [
