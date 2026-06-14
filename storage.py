@@ -95,7 +95,14 @@ def find_char_global(query: str) -> list[tuple[int, str, dict]]:
 # ── Google Sheets ──────────────────────────────────────────────────────────
 
 def get_gc():
-    creds = Credentials.from_service_account_file(CREDENTIALS, scopes=SCOPES)
+    creds_json = os.getenv("GOOGLE_CREDENTIALS")
+    if creds_json:
+        # อ่านจาก environment variable
+        creds_info = json.loads(creds_json)
+        creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+    else:
+        # fallback อ่านจากไฟล์ (สำหรับ local)
+        creds = Credentials.from_service_account_file(CREDENTIALS, scopes=SCOPES)
     return gspread.authorize(creds)
 
 def find_sheet_tab(sh, query: str) -> str | None:
