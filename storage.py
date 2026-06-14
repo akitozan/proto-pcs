@@ -8,8 +8,16 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 # ── Local JSON storage ─────────────────────────────────────────────────────
 
 def load_data() -> dict:
+    # ถ้าไม่มีไฟล์ใน Volume แต่มีใน repo ให้ copy มา
     if not os.path.exists(DATA_FILE):
-        return {}
+        os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
+        fallback = "data.json"
+        if os.path.exists(fallback):
+            import shutil
+            shutil.copy(fallback, DATA_FILE)
+            print(f"[ INIT ] — Copy {fallback} → {DATA_FILE}")
+        else:
+            return {}
     with open(DATA_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
