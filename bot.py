@@ -221,11 +221,23 @@ async def sync_cmd(interaction: discord.Interaction, char: str = None):
     if err: return await interaction.followup.send(embed=err, ephemeral=True)
 
     sheet_tab = char_data.get("sheet_tab") or ""
+    is_npc = char_data.get("is_npc", False)
+    fetch_fn = fetch_npc_sheet if is_npc else fetch_sheet
+    sheet_label = "NPC Sheet" if is_npc else "Player Sheet"
+    fail_reason = None
+
     # ถ้า sheet_tab เป็น partial query เก่า ให้ลอง fetch ด้วยชื่อตัวละครแทน
-    new_data = fetch_sheet(sheet_tab) if sheet_tab else None
+    new_data = None
+    if sheet_tab:
+        new_data = fetch_fn(sheet_tab)
+        if new_data is None:
+            fail_reason = f"หาแท็บ `{sheet_tab}` ไม่เจอใน {sheet_label} หรือ Google Sheets ไม่ตอบสนอง"
+
     if new_data is None:
         # ลอง fetch ด้วยชื่อตัวละครจริง
-        new_data = fetch_sheet(char_name)
+        new_data = fetch_fn(char_name)
+        if new_data is None and fail_reason is None:
+            fail_reason = f"หาแท็บ `{char_name}` ไม่เจอใน {sheet_label} หรือ Google Sheets ไม่ตอบสนอง"
 
     offline = False
     if new_data is None:
@@ -251,7 +263,7 @@ async def sync_cmd(interaction: discord.Interaction, char: str = None):
 
     embed = discord.Embed(title="[ SYNC COMPLETE ]", color=COLOR_INFO)
     if offline:
-        embed.description = "⚠️ Google Sheets ไม่ตอบสนอง ใช้ข้อมูลที่ sync ไว้ล่าสุด ข้อมูลอาจไม่เป็นปัจจุบัน"
+        embed.description = f"⚠️ Sync ไม่สำเร็จ ใช้ข้อมูลที่ sync ไว้ล่าสุดแทน\n**สาเหตุ:** {fail_reason}"
     else:
         embed.description = f"อัปเดตข้อมูล **{char_name}** จาก Google Sheets แล้ว"
     embed.add_field(name="💪 STR", value=fmt_stat(new_data["str"]), inline=True)
@@ -2301,12 +2313,14 @@ async def pcs_cmd(interaction: discord.Interaction, message: str):
 async def auto_sync_task():
     await bot.wait_until_ready()
     while not bot.is_closed():
-        await asyncio.sleep(25 * 60)
+        await asyncio.sleep(12 * 60 * 60)  # 12 ชั่วโมง
         print("[ AUTO SYNC ] — กำลัง sync ข้อมูลทุกตัวละคร...")
         data = load_data()
         synced = 0
         failed = 0
+        fail_reasons = []
         for uid, user in data.items():
+            if uid.startswith("_"): continue  # ข้าม _parties
             for char_name, cd in user.get("chars", {}).items():
                 sheet_tab = cd.get("sheet_tab") or char_name
                 is_npc = cd.get("is_npc", False)
@@ -2322,10 +2336,18 @@ async def auto_sync_task():
                         synced += 1
                     else:
                         failed += 1
+                        fail_reasons.append(f"{char_name} (sheet_tab='{sheet_tab}') — หาแท็บไม่เจอ หรือ Google Sheets ไม่ตอบสนอง")
                 except Exception as e:
-                    print(f"[ AUTO SYNC ERROR ] {char_name}: {e}")
+                    print(f"[ AUTO SYNC ERROR ] {char_name}: {type(e).__name__}: {e}")
                     failed += 1
+                    fail_reasons.append(f"{char_name} (sheet_tab='{sheet_tab}') — {type(e).__name__}: {e}")
+                # หยุดพักระหว่างตัวละครเพื่อไม่ชน Google Sheets rate limit
+                await asyncio.sleep(2)
         print(f"[ AUTO SYNC ] — เสร็จแล้ว: {synced} ✅  {failed} ❌")
+        if fail_reasons:
+            print("[ AUTO SYNC ] — รายละเอียดที่ล้มเหลว:")
+            for reason in fail_reasons:
+                print(f"    ⚠️ {reason}")
 
 @bot.event
 async def on_ready():
