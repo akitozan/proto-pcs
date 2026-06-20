@@ -134,6 +134,7 @@ def fetch_sheet(query: str) -> dict | None:
         # Try partial match on tab name
         tab_name = find_sheet_tab(sh, query)
         if not tab_name:
+            print(f"[Sheets] — ไม่พบแท็บที่ตรงกับ '{query}' ในชีท Player")
             return None
 
         ws = sh.worksheet(tab_name)
@@ -142,7 +143,7 @@ def fetch_sheet(query: str) -> dict | None:
         result["sheet_tab"] = tab_name
         return result
     except Exception as e:
-        print(f"[Sheets Error] {type(e).__name__}: {e}")
+        print(f"[Sheets Error] query='{query}' — {type(e).__name__}: {e}")
         return None
 
 def fetch_npc_sheet(query: str) -> dict | None:
