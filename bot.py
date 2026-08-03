@@ -1526,7 +1526,7 @@ class InitiativeNPCBatchModal(discord.ui.Modal, title="ทอย Initiative ใ�
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-@tree.command(name="initiative-npc", description="[PRTS] ทอย Initiative ให้ NPC หรือมอนสเตอร์ (รองรับหลายตัวพร้อมกัน)")
+@tree.command(name="ini-npc", description="[PRTS] ทอย Initiative ให้ NPC หรือมอนสเตอร์ (รองรับหลายตัวพร้อมกัน)")
 async def initiative_npc(interaction: discord.Interaction):
     if not is_prts(interaction.user):
         return await interaction.response.send_message(
