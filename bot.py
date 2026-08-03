@@ -2446,10 +2446,12 @@ async def auto_sync_task():
 
 @bot.event
 async def on_ready():
-    await tree.sync(guild=discord.Object(id=1474630417955950692))
+    guild = discord.Object(id=1474630417955950692)
+    tree.clear_commands(guild=guild)
+    await tree.sync(guild=guild)
     await tree.sync()
     bot.loop.create_task(auto_sync_task())
     print(f"[ SYSTEM ONLINE ] — Logged in as {bot.user}")
-    print(f"[ AUTO SYNC ] — จะ sync ทุก 25 นาที")
+    print(f"[ AUTO SYNC ] — จะ sync ทุก 12 ชั่วโมง")
 
 bot.run(BOT_TOKEN)
