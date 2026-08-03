@@ -213,18 +213,27 @@ def parse_sheet(rows: list) -> dict:
     wis  = to_int(find_label_next_row(rows, "WIS") or "0")
     stats = {"str": str_, "dex": dex, "int": int_, "wis": wis}
 
-    # ── Calculated values (compute from rules, don't read from sheet formulas) ──
-    base_hp = CLASS_HP.get(class_, 6)
-    if race in ("Forte", "Archosauria"):
-        base_hp += 3
-    max_hp = base_hp
+    # ── Calculated values ──
+    # อ่าน Max HP/AP ตรงๆ จากชีท ถ้าไม่เจอค่อย fallback คำนวณจาก class/race
+    max_hp_raw = find_label_next_row(rows, "Max HP")
+    if max_hp_raw:
+        max_hp = to_int(max_hp_raw)
+    else:
+        base_hp = CLASS_HP.get(class_, 6)
+        if race in ("Forte", "Archosauria"):
+            base_hp += 3
+        max_hp = base_hp
 
-    base_ap = CLASS_AP.get(class_, 10)
-    if infected.lower() == "yes":
-        base_ap += 5
-    if race in ("Sarkaz:Lich", "Caprinae"):
-        base_ap += 10
-    max_ap = base_ap
+    max_ap_raw = find_label_next_row(rows, "Max AP")
+    if max_ap_raw:
+        max_ap = to_int(max_ap_raw)
+    else:
+        base_ap = CLASS_AP.get(class_, 10)
+        if infected.lower() == "yes":
+            base_ap += 5
+        if race in ("Sarkaz:Lich", "Caprinae"):
+            base_ap += 10
+        max_ap = base_ap
 
     ac = 16 if class_ == "Defender" else max(10, 10 + dex)
     if shield.lower() == "yes":
