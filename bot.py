@@ -226,7 +226,6 @@ async def sync_cmd(interaction: discord.Interaction, char: str = None):
     sheet_label = "NPC Sheet" if is_npc else "Player Sheet"
     fail_reason = None
 
-    # ถ้า sheet_tab เป็น partial query เก่า ให้ลอง fetch ด้วยชื่อตัวละครแทน
     new_data = None
     if sheet_tab:
         new_data = fetch_fn(sheet_tab)
@@ -234,7 +233,6 @@ async def sync_cmd(interaction: discord.Interaction, char: str = None):
             fail_reason = f"หาแท็บ `{sheet_tab}` ไม่เจอใน {sheet_label} หรือ Google Sheets ไม่ตอบสนอง"
 
     if new_data is None:
-        # ลอง fetch ด้วยชื่อตัวละครจริง
         new_data = fetch_fn(char_name)
         if new_data is None and fail_reason is None:
             fail_reason = f"หาแท็บ `{char_name}` ไม่เจอใน {sheet_label} หรือ Google Sheets ไม่ตอบสนอง"
@@ -270,7 +268,14 @@ async def sync_cmd(interaction: discord.Interaction, char: str = None):
     embed.add_field(name="🏃 DEX", value=fmt_stat(new_data["dex"]), inline=True)
     embed.add_field(name="🧠 INT", value=fmt_stat(new_data["int"]), inline=True)
     embed.add_field(name="🌿 WIS", value=fmt_stat(new_data["wis"]), inline=True)
-    embed.add_field(name="HP/AP", value=f"ไม่เปลี่ยนแปลง ({new_data['current_hp']}/{new_data['max_hp']} | {new_data['current_ap']}/{new_data['max_ap']})", inline=False)
+    hp_changed = new_data["max_hp"] != char_data["max_hp"]
+    ap_changed = new_data["max_ap"] != char_data["max_ap"]
+    if hp_changed or ap_changed:
+        hp_note = f"❤️ Max HP: {char_data['max_hp']} → **{new_data['max_hp']}**" if hp_changed else f"❤️ HP: {new_data['current_hp']}/{new_data['max_hp']}"
+        ap_note = f"✨ Max AP: {char_data['max_ap']} → **{new_data['max_ap']}**" if ap_changed else f"✨ AP: {new_data['current_ap']}/{new_data['max_ap']}"
+        embed.add_field(name="HP/AP", value=f"{hp_note}\n{ap_note}", inline=False)
+    else:
+        embed.add_field(name="HP/AP", value=f"ไม่เปลี่ยนแปลง ({new_data['current_hp']}/{new_data['max_hp']} | {new_data['current_ap']}/{new_data['max_ap']})", inline=False)
     embed.set_footer(text=f"Operator: {interaction.user.display_name}")
     await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -712,21 +717,41 @@ async def roll_cmd(interaction: discord.Interaction, stat: str = None, dice: str
 
     # Custom dice mode
     if dice and not stat:
-        try:
-            rolls, raw = roll_dice(dice + (f"+{bonus_total}" if bonus_total else ""))
-        except ValueError as e:
-            return await interaction.response.send_message(
-                embed=discord.Embed(description=f"[ ERROR ] — {e}", color=COLOR_ERROR), ephemeral=True)
-
-        embed = discord.Embed(color=COLOR_NORMAL)
-        if comment:
-            embed.description = f"*💬 {comment}*"
-        embed.add_field(name="🎲 Dice", value=dice, inline=True)
-        roll_str = " + ".join(str(r) for r in rolls) + f" = **{sum(rolls)}**" if len(rolls) > 1 else f"**{rolls[0]}**"
-        embed.add_field(name="🎲 Roll", value=roll_str, inline=True)
-        embed.add_field(name="📊 Total", value=f"**{raw}**\n`{dice}({sum(rolls)}){fmt(bonus_total) if bonus_total else ''}`", inline=False)
-        embed.set_footer(text=f"Operator: {interaction.user.display_name}")
-        return await interaction.response.send_message(embed=embed)
+        if adv_dis in ("adv", "dis"):
+            # ทอยสองรอบ เอาสูงหรือต่ำ
+            try:
+                rolls1, raw1 = roll_dice(dice + (f"+{bonus_total}" if bonus_total else ""))
+                rolls2, raw2 = roll_dice(dice + (f"+{bonus_total}" if bonus_total else ""))
+            except ValueError as e:
+                return await interaction.response.send_message(
+                    embed=discord.Embed(description=f"[ ERROR ] — {e}", color=COLOR_ERROR), ephemeral=True)
+            if adv_dis == "adv":
+                rolls, raw = (rolls1, raw1) if raw1 >= raw2 else (rolls2, raw2)
+                adv_str = f"~~{min(raw1,raw2)}~~ → **{max(raw1,raw2)}** 🎲🎲 Advantage"
+            else:
+                rolls, raw = (rolls1, raw1) if raw1 <= raw2 else (rolls2, raw2)
+                adv_str = f"~~{max(raw1,raw2)}~~ → **{min(raw1,raw2)}** 🎲🎲 Disadvantage"
+            embed = discord.Embed(color=COLOR_NORMAL)
+            if comment: embed.description = f"*💬 {comment}*"
+            embed.add_field(name="🎲 Dice", value=dice, inline=True)
+            embed.add_field(name="🎲 Roll", value=adv_str, inline=True)
+            embed.add_field(name="📊 Total", value=f"**{raw}**\n`{dice}({sum(rolls)}){fmt(bonus_total) if bonus_total else ''}`", inline=False)
+            embed.set_footer(text=f"Operator: {interaction.user.display_name}")
+            return await interaction.response.send_message(embed=embed)
+        else:
+            try:
+                rolls, raw = roll_dice(dice + (f"+{bonus_total}" if bonus_total else ""))
+            except ValueError as e:
+                return await interaction.response.send_message(
+                    embed=discord.Embed(description=f"[ ERROR ] — {e}", color=COLOR_ERROR), ephemeral=True)
+            embed = discord.Embed(color=COLOR_NORMAL)
+            if comment: embed.description = f"*💬 {comment}*"
+            embed.add_field(name="🎲 Dice", value=dice, inline=True)
+            roll_str = " + ".join(str(r) for r in rolls) + f" = **{sum(rolls)}**" if len(rolls) > 1 else f"**{rolls[0]}**"
+            embed.add_field(name="🎲 Roll", value=roll_str, inline=True)
+            embed.add_field(name="📊 Total", value=f"**{raw}**\n`{dice}({sum(rolls)}){fmt(bonus_total) if bonus_total else ''}`", inline=False)
+            embed.set_footer(text=f"Operator: {interaction.user.display_name}")
+            return await interaction.response.send_message(embed=embed)
 
     # Stat roll mode
     if not stat:
@@ -1404,40 +1429,111 @@ async def initiative_cmd(interaction: discord.Interaction):
     view = InitiativeView(interaction.guild.id)
     await interaction.response.send_message(embed=embed, view=view)
 
-@tree.command(name="initiative-npc", description="[PRTS] ทอย Initiative ให้ NPC หรือมอนสเตอร์")
-@app_commands.describe(name="ชื่อ NPC หรือมอนสเตอร์", bonus="bonus เพิ่มเติม เช่น 2 หรือ -1", adv_dis="Advantage หรือ Disadvantage")
-@app_commands.choices(adv_dis=[
-    app_commands.Choice(name="Advantage", value="adv"),
-    app_commands.Choice(name="Disadvantage", value="dis"),
-])
-async def initiative_npc(interaction: discord.Interaction, name: str, bonus: int = 0, adv_dis: str = None):
+class InitiativeNPCBatchModal(discord.ui.Modal, title="ทอย Initiative ให้ NPC / มอนสเตอร์"):
+    batch = discord.ui.TextInput(
+        label="รายชื่อ NPC (แต่ละกลุ่มขึ้นบรรทัดใหม่)",
+        style=discord.TextStyle.paragraph,
+        placeholder=(
+            "ชื่อ จำนวน โบนัส(ถ้ามี) adv/dis(ถ้ามี)\n"
+            "─────────────────────────────\n"
+            "สัตว์เขี้ยว 3 +2 adv\n"
+            "ลุงบ๊อบ 1\n"
+            "โจรลูโป 2 +2"
+        ),
+        required=True)
+
+    def __init__(self, guild_id):
+        super().__init__()
+        self.guild_id = guild_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        import re as _re
+        if self.guild_id not in initiative_active:
+            initiative_active[self.guild_id] = {}
+
+        lines_raw = self.batch.value.strip().split("\n")
+        results = []
+        errors = []
+
+        for line in lines_raw:
+            line = line.strip()
+            if not line or line.startswith("─"): continue
+
+            # Parse: ชื่อ จำนวน โบนัส adv/dis
+            # ดึง adv/dis ก่อน
+            adv_dis = None
+            if _re.search(r'\badv\b', line, _re.IGNORECASE):
+                adv_dis = "adv"
+                line = _re.sub(r'\badv\b', '', line, flags=_re.IGNORECASE).strip()
+            elif _re.search(r'\bdis\b', line, _re.IGNORECASE):
+                adv_dis = "dis"
+                line = _re.sub(r'\bdis\b', '', line, flags=_re.IGNORECASE).strip()
+
+            # ดึง bonus (+2, -1)
+            bonus = 0
+            bonus_match = _re.search(r'([+\-]\d+)$', line.strip())
+            if bonus_match:
+                bonus = int(bonus_match.group(1))
+                line = line[:bonus_match.start()].strip()
+
+            # ดึง จำนวน (ตัวเลขท้ายสุด)
+            parts = line.strip().rsplit(None, 1)
+            if len(parts) < 2:
+                errors.append(f"❌ `{line.strip()}` — รูปแบบไม่ถูกต้อง (ต้องมีชื่อและจำนวน)")
+                continue
+            try:
+                count = int(parts[1])
+                npc_name = parts[0].strip()
+            except ValueError:
+                errors.append(f"❌ `{line.strip()}` — จำนวนต้องเป็นตัวเลข")
+                continue
+
+            if count < 1:
+                errors.append(f"❌ `{npc_name}` — จำนวนต้องมากกว่า 0")
+                continue
+
+            # ทอยแต่ละตัว
+            for i in range(1, count + 1):
+                entry_name = f"{npc_name} {i}" if count > 1 else npc_name
+                r1 = random.randint(1, 20)
+                if adv_dis == "adv":
+                    r2 = random.randint(1, 20)
+                    roll = max(r1, r2)
+                    roll_display = f"~~{min(r1,r2)}~~ → {roll} 🎲🎲 Adv"
+                elif adv_dis == "dis":
+                    r2 = random.randint(1, 20)
+                    roll = min(r1, r2)
+                    roll_display = f"~~{max(r1,r2)}~~ → {roll} 🎲🎲 Dis"
+                else:
+                    roll = r1
+                    roll_display = str(roll)
+
+                total = roll + bonus
+                initiative_active[self.guild_id][entry_name] = total
+                bonus_str = fmt(bonus) if bonus else ""
+                results.append(f"**{entry_name}** — {total} `d20({roll_display}){bonus_str}`")
+
+        # แสดงผล
+        desc_parts = []
+        if results:
+            desc_parts.append("🎲 ทอย Initiative สำเร็จ (ซ่อนผลจนกว่าจะ /initiative-order)\n" + "\n".join(results))
+        if errors:
+            desc_parts.append("\n".join(errors))
+
+        embed = discord.Embed(
+            description="\n\n".join(desc_parts) if desc_parts else "ไม่มีข้อมูล",
+            color=COLOR_PURPLE if results else COLOR_ERROR)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@tree.command(name="initiative-npc", description="[PRTS] ทอย Initiative ให้ NPC หรือมอนสเตอร์ (รองรับหลายตัวพร้อมกัน)")
+async def initiative_npc(interaction: discord.Interaction):
     if not is_prts(interaction.user):
         return await interaction.response.send_message(
             embed=discord.Embed(description=f"[ ACCESS DENIED ] — {interaction.user.mention} : Insufficient clearance. PRTS Only.", color=COLOR_ERROR),
             ephemeral=True)
-    if interaction.guild.id not in initiative_active:
-        initiative_active[interaction.guild.id] = {}
+    await interaction.response.send_modal(InitiativeNPCBatchModal(interaction.guild.id))
 
-    r1 = random.randint(1, 20)
-    if adv_dis == "adv":
-        r2 = random.randint(1, 20)
-        roll = max(r1, r2)
-        roll_display = f"~~{min(r1,r2)}~~ → {roll} 🎲🎲 Advantage"
-    elif adv_dis == "dis":
-        r2 = random.randint(1, 20)
-        roll = min(r1, r2)
-        roll_display = f"~~{max(r1,r2)}~~ → {roll} 🎲🎲 Disadvantage"
-    else:
-        roll = r1
-        roll_display = str(roll)
-
-    total = roll + bonus
-    initiative_active[interaction.guild.id][name] = total
-    bonus_str = fmt(bonus) if bonus else ""
-    embed = discord.Embed(
-        description=f"🎲 **{name}** ทอยได้ **{total}** `d20({roll_display}){bonus_str}`\nซ่อนผลจนกว่าจะ /initiative-order",
-        color=COLOR_PURPLE)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @tree.command(name="initiative-order", description="[PRTS] ปิด Initiative Phase และแสดง order")
 async def initiative_order(interaction: discord.Interaction):
@@ -2320,7 +2416,7 @@ async def auto_sync_task():
         failed = 0
         fail_reasons = []
         for uid, user in data.items():
-            if uid.startswith("_"): continue  # ข้าม _parties
+            if uid.startswith("_"): continue
             for char_name, cd in user.get("chars", {}).items():
                 sheet_tab = cd.get("sheet_tab") or char_name
                 is_npc = cd.get("is_npc", False)
@@ -2340,14 +2436,13 @@ async def auto_sync_task():
                 except Exception as e:
                     print(f"[ AUTO SYNC ERROR ] {char_name}: {type(e).__name__}: {e}")
                     failed += 1
-                    fail_reasons.append(f"{char_name} (sheet_tab='{sheet_tab}') — {type(e).__name__}: {e}")
-                # หยุดพักระหว่างตัวละครเพื่อไม่ชน Google Sheets rate limit
+                    fail_reasons.append(f"{char_name} — {type(e).__name__}: {e}")
                 await asyncio.sleep(2)
         print(f"[ AUTO SYNC ] — เสร็จแล้ว: {synced} ✅  {failed} ❌")
         if fail_reasons:
             print("[ AUTO SYNC ] — รายละเอียดที่ล้มเหลว:")
-            for reason in fail_reasons:
-                print(f"    ⚠️ {reason}")
+            for r in fail_reasons:
+                print(f"    ⚠️ {r}")
 
 @bot.event
 async def on_ready():
