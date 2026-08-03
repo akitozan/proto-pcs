@@ -1310,13 +1310,15 @@ class InitiativeBonusModal(discord.ui.Modal, title="Initiative Bonus"):
         label="โบนัส",
         placeholder="เช่น +2 หรือ -1",
         required=True)
+
     def __init__(self, guild_id, adv_dis=None):
         super().__init__()
         self.guild_id = guild_id
         self.adv_dis = adv_dis
+
     async def on_submit(self, interaction: discord.Interaction):
-        val = self.bonus.value.strip()
         import re as _re
+        val = self.bonus.value.strip()
         if not _re.match(r"^[+\-]\d+$", val):
             return await interaction.response.send_message(
                 embed=discord.Embed(description="[ ERROR ] — กรุณาใส่ `+2` หรือ `-1` (ต้องมี + หรือ - นำหน้า)", color=COLOR_ERROR),
@@ -1367,16 +1369,13 @@ class InitiativeView(discord.ui.View):
             return await interaction.response.send_message(
                 embed=discord.Embed(description="[ ERROR ] — ไม่พบตัวละคร Default กรุณาใช้ `/set-char` ก่อน", color=COLOR_ERROR),
                 ephemeral=True)
-
         char_name = cd["name"]
         if self.guild_id in initiative_active and char_name in initiative_active[self.guild_id]:
             return await interaction.response.send_message(
                 embed=discord.Embed(description=f"[ WARNING ] — **{char_name}** ทอยไปแล้วในรอบนี้", color=COLOR_WARN),
                 ephemeral=True)
-
         wis = cd["wis"]
         r1 = random.randint(1, 20)
-
         if adv_dis == "adv":
             r2 = random.randint(1, 20)
             roll = max(r1, r2)
@@ -1388,13 +1387,10 @@ class InitiativeView(discord.ui.View):
         else:
             roll = r1
             roll_display = f"**{roll}**"
-
         total = roll + wis
-
         if self.guild_id not in initiative_active:
             initiative_active[self.guild_id] = {}
         initiative_active[self.guild_id][char_name] = total
-
         embed = discord.Embed(
             description=f"🎲 **{char_name}** ทอย Initiative ได้ **{total}** `d20({roll_display}) + WIS({wis})`",
             color=COLOR_CYAN)
@@ -1416,26 +1412,13 @@ class InitiativeView(discord.ui.View):
     async def roll_bonus(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(InitiativeBonusModal(self.guild_id))
 
-@tree.command(name="initiative", description="[PRTS] เปิด Initiative Phase")
-async def initiative_cmd(interaction: discord.Interaction):
-    if not is_prts(interaction.user):
-        return await interaction.response.send_message(
-            embed=discord.Embed(description=f"[ ACCESS DENIED ] — {interaction.user.mention} : Insufficient clearance. PRTS Only.", color=COLOR_ERROR),
-            ephemeral=True)
-    initiative_active[interaction.guild.id] = {}
-    embed = discord.Embed(title="⚔️ INITIATIVE PHASE",
-                          description="กดปุ่มด้านล่างเพื่อทอย Initiative ของตัวเอง\nระบบจะทอย 1d20 + WIS ให้อัตโนมัติ",
-                          color=COLOR_CYAN)
-    view = InitiativeView(interaction.guild.id)
-    await interaction.response.send_message(embed=embed, view=view)
 
-class InitiativeNPCBatchModal(discord.ui.Modal, title="ทอย Initiative ให้ NPC / มอนสเตอร์"):
+class InitiativeNPCModal(discord.ui.Modal, title="ทอย Initiative ให้ NPC / มอนสเตอร์"):
     batch = discord.ui.TextInput(
         label="รายชื่อ NPC (แต่ละกลุ่มขึ้นบรรทัดใหม่)",
         style=discord.TextStyle.paragraph,
         placeholder=(
             "ชื่อ จำนวน โบนัส(ถ้ามี) adv/dis(ถ้ามี)\n"
-            "─────────────────────────────\n"
             "สัตว์เขี้ยว 3 +2 adv\n"
             "ลุงบ๊อบ 1\n"
             "โจรลูโป 2 +2"
@@ -1448,19 +1431,14 @@ class InitiativeNPCBatchModal(discord.ui.Modal, title="ทอย Initiative ใ�
 
     async def on_submit(self, interaction: discord.Interaction):
         import re as _re
-        if self.guild_id not in initiative_active:
-            initiative_active[self.guild_id] = {}
-
         lines_raw = self.batch.value.strip().split("\n")
         results = []
         errors = []
 
         for line in lines_raw:
             line = line.strip()
-            if not line or line.startswith("─"): continue
+            if not line: continue
 
-            # Parse: ชื่อ จำนวน โบนัส adv/dis
-            # ดึง adv/dis ก่อน
             adv_dis = None
             if _re.search(r'\badv\b', line, _re.IGNORECASE):
                 adv_dis = "adv"
@@ -1469,17 +1447,15 @@ class InitiativeNPCBatchModal(discord.ui.Modal, title="ทอย Initiative ใ�
                 adv_dis = "dis"
                 line = _re.sub(r'\bdis\b', '', line, flags=_re.IGNORECASE).strip()
 
-            # ดึง bonus (+2, -1)
             bonus = 0
             bonus_match = _re.search(r'([+\-]\d+)$', line.strip())
             if bonus_match:
                 bonus = int(bonus_match.group(1))
                 line = line[:bonus_match.start()].strip()
 
-            # ดึง จำนวน (ตัวเลขท้ายสุด)
             parts = line.strip().rsplit(None, 1)
             if len(parts) < 2:
-                errors.append(f"❌ `{line.strip()}` — รูปแบบไม่ถูกต้อง (ต้องมีชื่อและจำนวน)")
+                errors.append(f"❌ `{line.strip()}` — ต้องมีชื่อและจำนวน")
                 continue
             try:
                 count = int(parts[1])
@@ -1487,12 +1463,10 @@ class InitiativeNPCBatchModal(discord.ui.Modal, title="ทอย Initiative ใ�
             except ValueError:
                 errors.append(f"❌ `{line.strip()}` — จำนวนต้องเป็นตัวเลข")
                 continue
-
             if count < 1:
                 errors.append(f"❌ `{npc_name}` — จำนวนต้องมากกว่า 0")
                 continue
 
-            # ทอยแต่ละตัว
             for i in range(1, count + 1):
                 entry_name = f"{npc_name} {i}" if count > 1 else npc_name
                 r1 = random.randint(1, 20)
@@ -1507,56 +1481,71 @@ class InitiativeNPCBatchModal(discord.ui.Modal, title="ทอย Initiative ใ�
                 else:
                     roll = r1
                     roll_display = str(roll)
-
                 total = roll + bonus
                 initiative_active[self.guild_id][entry_name] = total
                 bonus_str = fmt(bonus) if bonus else ""
                 results.append(f"**{entry_name}** — {total} `d20({roll_display}){bonus_str}`")
 
-        # แสดงผล
         desc_parts = []
         if results:
-            desc_parts.append("🎲 ทอย Initiative สำเร็จ (ซ่อนผลจนกว่าจะ /initiative-order)\n" + "\n".join(results))
+            desc_parts.append("🎲 ทอย Initiative NPC สำเร็จ (ซ่อนผลจนกว่าจะ /ini-order)\n" + "\n".join(results))
         if errors:
             desc_parts.append("\n".join(errors))
-
         embed = discord.Embed(
             description="\n\n".join(desc_parts) if desc_parts else "ไม่มีข้อมูล",
             color=COLOR_PURPLE if results else COLOR_ERROR)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-@tree.command(name="ini-npc", description="[PRTS] ทอย Initiative ให้ NPC หรือมอนสเตอร์ (รองรับหลายตัวพร้อมกัน)")
+# ── Initiative Commands ─────────────────────────────────────────────────────
+
+@tree.command(name="ini", description="[PRTS] เปิด Initiative Phase")
+async def initiative_cmd(interaction: discord.Interaction):
+    if not is_prts(interaction.user):
+        return await interaction.response.send_message(
+            embed=discord.Embed(description=f"[ ACCESS DENIED ] — PRTS Only.", color=COLOR_ERROR), ephemeral=True)
+    initiative_active[interaction.guild.id] = {}
+    embed = discord.Embed(
+        title="⚔️ INITIATIVE PHASE",
+        description="กดปุ่มด้านล่างเพื่อทอย Initiative ของตัวเอง\nระบบจะทอย 1d20 + WIS ให้อัตโนมัติ",
+        color=COLOR_CYAN)
+    await interaction.response.send_message(embed=embed, view=InitiativeView(interaction.guild.id))
+
+
+@tree.command(name="ini-npc", description="[PRTS] ทอย Initiative ให้ NPC หรือมอนสเตอร์")
 async def initiative_npc(interaction: discord.Interaction):
     if not is_prts(interaction.user):
         return await interaction.response.send_message(
-            embed=discord.Embed(description=f"[ ACCESS DENIED ] — {interaction.user.mention} : Insufficient clearance. PRTS Only.", color=COLOR_ERROR),
+            embed=discord.Embed(description=f"[ ACCESS DENIED ] — PRTS Only.", color=COLOR_ERROR), ephemeral=True)
+    if interaction.guild.id not in initiative_active:
+        return await interaction.response.send_message(
+            embed=discord.Embed(
+                description="[ ERROR ] — ยังไม่ได้เปิด Initiative Phase\nกรุณาใช้ `/ini` ก่อน",
+                color=COLOR_ERROR),
             ephemeral=True)
-    await interaction.response.send_modal(InitiativeNPCBatchModal(interaction.guild.id))
+    await interaction.response.send_modal(InitiativeNPCModal(interaction.guild.id))
 
 
-@tree.command(name="initiative-order", description="[PRTS] ปิด Initiative Phase และแสดง order")
+@tree.command(name="ini-order", description="[PRTS] ปิด Initiative Phase และแสดงลำดับ")
 async def initiative_order(interaction: discord.Interaction):
     if not is_prts(interaction.user):
         return await interaction.response.send_message(
-            embed=discord.Embed(description=f"[ ACCESS DENIED ] — {interaction.user.mention} : Insufficient clearance. PRTS Only.", color=COLOR_ERROR),
-            ephemeral=True)
+            embed=discord.Embed(description=f"[ ACCESS DENIED ] — PRTS Only.", color=COLOR_ERROR), ephemeral=True)
     if interaction.guild.id not in initiative_active or not initiative_active[interaction.guild.id]:
         return await interaction.response.send_message(
-            embed=discord.Embed(description="[ ERROR ] — ยังไม่มีใครทอย Initiative กรุณาใช้ `/initiative` ก่อน", color=COLOR_ERROR),
+            embed=discord.Embed(description="[ ERROR ] — ยังไม่มีใครทอย Initiative กรุณาใช้ `/ini` ก่อน", color=COLOR_ERROR),
             ephemeral=True)
-
     order = sorted(initiative_active[interaction.guild.id].items(), key=lambda x: x[1], reverse=True)
     medals = ["🥇", "🥈", "🥉"]
     lines = []
     for i, (name, roll) in enumerate(order):
         medal = medals[i] if i < 3 else f"{i+1}."
         lines.append(f"{medal} **{name}** — {roll}")
-
     embed = discord.Embed(title="⚔️ INITIATIVE ORDER", description="\n".join(lines), color=COLOR_CYAN)
     embed.set_footer(text=f"Issued by: {interaction.user.display_name}")
     initiative_active.pop(interaction.guild.id, None)
     await interaction.response.send_message(embed=embed)
+
 
 # ── /ammo ──────────────────────────────────────────────────────────────────
 
