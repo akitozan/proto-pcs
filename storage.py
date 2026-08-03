@@ -214,7 +214,7 @@ def parse_sheet(rows: list) -> dict:
     stats = {"str": str_, "dex": dex, "int": int_, "wis": wis}
 
     # ── Calculated values ──
-    # อ่าน Max HP/AP ตรงๆ จากชีท ถ้าไม่เจอค่อย fallback คำนวณจาก class/race
+    # อ่าน Max HP ตรงจากชีท fallback คำนวณจาก class/race
     max_hp_raw = find_label_next_row(rows, "Max HP")
     if max_hp_raw:
         max_hp = to_int(max_hp_raw)
@@ -224,6 +224,7 @@ def parse_sheet(rows: list) -> dict:
             base_hp += 3
         max_hp = base_hp
 
+    # อ่าน Max AP ตรงจากชีท fallback คำนวณจาก class/race
     max_ap_raw = find_label_next_row(rows, "Max AP")
     if max_ap_raw:
         max_ap = to_int(max_ap_raw)
@@ -235,17 +236,27 @@ def parse_sheet(rows: list) -> dict:
             base_ap += 10
         max_ap = base_ap
 
-    ac = 16 if class_ == "Defender" else max(10, 10 + dex)
-    if shield.lower() == "yes":
-        ac += 2
-        if race == "Vouivre":
+    # อ่าน AC ตรงจากชีท fallback คำนวณจาก class/dex/shield/race
+    ac_raw = find_label_next_row(rows, "AC")
+    if ac_raw:
+        ac = to_int(ac_raw)
+    else:
+        ac = 16 if class_ == "Defender" else max(10, 10 + dex)
+        if shield.lower() == "yes":
+            ac += 2
+            if race == "Vouivre":
+                ac += 1
+        if race == "Kuranta":
             ac += 1
-    if race == "Kuranta":
-        ac += 1
 
-    spd = 6
-    if race == "Kuranta": spd += 2
-    if race == "Zalak":   spd += 3
+    # อ่าน SPD ตรงจากชีท fallback คำนวณจาก race
+    spd_raw = find_label_next_row(rows, "SPD")
+    if spd_raw:
+        spd = to_int(spd_raw)
+    else:
+        spd = 6
+        if race == "Kuranta": spd += 2
+        if race == "Zalak":   spd += 3
 
     # ── Weapons ──
     weapons = []
